@@ -1,0 +1,65 @@
+name: 'Android GKI Kernel Build Action'
+description: "A action to built android GKI kernel."
+
+inputs:
+  version:
+    required: true
+    description: "GkI Kernel Source Pull Version."
+    default: "android12-5.10"
+  version_name:
+    required: true
+    description: "GKI Kernel Sublevel."
+    default: "android12-5.10.66"
+  tag:
+    required: true
+    description: "Part of branch name of common kernel manifest."
+    default: "android12-5.10-2021-11"
+  os_patch_level:
+    required: true
+    description: "Patch level of common kernel manifest."
+    default: "2021-11"
+
+
+  runs:
+  using: 'composite'
+  steps:
+
+    - name: Build
+      shell: bash
+      run: |
+         curl -SsL https://github.com/rokibhasansagar/slimhub_actions/raw/main/cleanup.sh | bash
+         echo "::group:: Installing Building Depend Packages"
+         sudo apt-get update
+         sudo apt-get install -y python3
+         echo "::endgroup::"
+         echo "::group:: Initializing repo"
+         mkdir ~/bin
+         curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+         chmod a+x ~/bin/repo
+         python3 ~/bin/repo --version
+         echo "::endgroup::"
+         echo "::group:: Initializing Kernel Source"
+         mkdir kernel
+         cd kernel
+         repo init --depth=1 --u https://android.googlesource.com/kernel/manifest -b common-${{ inputs.tag }}
+         if grep -q deprecated <<< $REMOTE_BRANCH; then
+            echo "Found deprecated branch: ${{ inputs.tag }}"
+            sed -i 's/"${{ inputs.tag }}"/"deprecated\/${{ inputs.tag }}"/g' $DEFAULT_MANIFEST_PATH
+            cat $DEFAULT_MANIFEST_PATH
+          fi
+          repo --trace sync -c -j$(nproc --all) --no-tags
+          echo "::endgroup::"
+          echo "::group:: Building boot.img"
+          if [ -e build/build.sh ]; then
+            LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh
+          else 
+            tools/bazel run --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
+          fi
+          echo "::endgroup::"
+    - id: upload
+      uses: actions/upload-artifact@v3
+      with:
+        name: kernel
+        path: dist/Image*
+          
+         
