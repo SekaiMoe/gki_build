@@ -21,8 +21,8 @@ inputs:
 
 
   runs:
-  using: 'composite'
-  steps:
+   using: 'composite'
+   steps:
 
     - name: Build
       shell: bash
